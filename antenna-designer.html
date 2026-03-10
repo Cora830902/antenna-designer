@@ -610,30 +610,53 @@ function calcAntenna() {
       '半功率波束寬': { v: '48', u:'°（仰角）' },
     };
   } else if(currentAntType === 'patch') {
-    const er_eff = (er+1)/2 + (er-1)/2 * Math.pow(1 + 12*subH/(lambda/2), -0.5);
-    const Leff = c/(2*f*Math.sqrt(er_eff));
-    const dL = 0.412 * subH * (er_eff+0.3)*(Leff/subH+0.264) / ((er_eff-0.258)*(Leff/subH+0.8));
+    // Step 1: Optimal width W (Bahl & Trivedi)
+    const W = c / (2*f) * Math.sqrt(2/(er+1));
+    // Step 2: Effective dielectric constant using W (correct formula)
+    const er_eff = (er+1)/2 + (er-1)/2 * Math.pow(1 + 12*subH/W, -0.5);
+    // Step 3: Effective length
+    const Leff = c / (2*f*Math.sqrt(er_eff));
+    // Step 4: End-effect extension ΔL (Hammerstad equation)
+    const dL = 0.412 * subH * (er_eff+0.3)*(W/subH+0.264) / ((er_eff-0.258)*(W/subH+0.8));
+    // Step 5: Physical length
     const L = Leff - 2*dL;
-    const W = c/(2*f) * Math.sqrt(2/(er+1));
+    // Edge impedance estimate (Derneryd)
+    const Rin_edge = 90 * er*er / (er-1) * (Leff/W) * (Leff/W);
+    const Rin_clamped = Math.min(Math.max(Rin_edge, 100), 400);
+    // Inset feed distance for 50Ω match
+    const y0 = (L/Math.PI) * Math.acos(Math.sqrt(50/Rin_edge));
     results = {
-      'λ（介質中）': { v: (c/f/Math.sqrt(er_eff)*1000).toFixed(2), u:'mm' },
-      '貼片長度 L': { v: (L*1000).toFixed(2), u:'mm' },
-      '貼片寬度 W': { v: (W*1000).toFixed(2), u:'mm' },
-      '有效介電常數': { v: er_eff.toFixed(3), u:'' },
-      '輸入阻抗': { v: '~100-300', u:'Ω (邊饋)' },
-      '增益': { v: '5-6', u:'dBi' },
+      '貼片寬度 W': { v: (W*1000).toFixed(3), u:'mm' },
+      '貼片長度 L': { v: (L*1000).toFixed(3), u:'mm' },
+      '有效介電常數 εeff': { v: er_eff.toFixed(4), u:'' },
+      '端效應延伸 ΔL': { v: (dL*1000).toFixed(4), u:'mm' },
+      '邊饋阻抗 Rin': { v: Rin_clamped.toFixed(0), u:'Ω' },
+      '內饋距離 y₀': { v: isNaN(y0)||y0<0 ? 'N/A' : (y0*1000).toFixed(3), u:'mm (50Ω)' },
+      '增益估計': { v: '5~6', u:'dBi' },
     };
   } else if(currentAntType === 'yagi') {
-    const Ldriven = (0.473 * lambda * 1000).toFixed(1);
-    const Lrefl = (0.5 * lambda * 1000).toFixed(1);
-    const Ldir = (0.440 * lambda * 1000).toFixed(1);
+    // Standard Yagi-Uda design (Stutzman & Thiele, 3-element)
+    // Driven: ~0.47λ (folded dipole commonly 0.47λ)
+    // Reflector: ~0.50λ (slightly longer)
+    // Director: ~0.43λ (slightly shorter)
+    // Spacing: refl-driven ~0.25λ, driven-dir ~0.31λ
+    const Ldriven = (0.470 * lambda * 1000).toFixed(2);
+    const Lrefl   = (0.500 * lambda * 1000).toFixed(2);
+    const Ldir1   = (0.430 * lambda * 1000).toFixed(2);
+    const Ldir2   = (0.420 * lambda * 1000).toFixed(2);
+    const sRefl   = (0.250 * lambda * 1000).toFixed(2);
+    const sDir    = (0.310 * lambda * 1000).toFixed(2);
     results = {
-      '驅動元素長度': { v: Ldriven, u:'mm' },
+      '驅動元素 (λ/2)': { v: Ldriven, u:'mm' },
       '反射器長度': { v: Lrefl, u:'mm' },
-      '導向器長度': { v: Ldir, u:'mm' },
-      '估計增益（3元）': { v: '7.1', u:'dBi' },
-      '前後比': { v: '>10', u:'dB' },
-      '阻抗': { v: '50-75', u:'Ω' },
+      '導向器 1 長度': { v: Ldir1, u:'mm' },
+      '導向器 2 長度': { v: Ldir2, u:'mm' },
+      '反射器間距': { v: sRefl, u:'mm' },
+      '導向器間距': { v: sDir, u:'mm' },
+      '估計增益 (3元)': { v: '7.1', u:'dBi' },
+      '估計增益 (4元)': { v: '9.0', u:'dBi' },
+      '前後比 F/B': { v: '>10', u:'dB' },
+      '輸入阻抗': { v: '~50~75', u:'Ω' },
     };
   } else if(currentAntType === 'loop') {
     const a = wireR;
@@ -658,75 +681,149 @@ function calcAntenna() {
 }
 
 // ============ RADIATION PATTERN ============
-function drawPattern() {
+// Per-antenna pattern functions (return linear field magnitude 0..1)
+const patternFuncs = {
+  dipole:   t => { const s = Math.sin(t); if(Math.abs(s)<1e-6) return 0; return Math.abs(Math.cos(Math.PI/2*Math.cos(t))/s); },
+  monopole: t => { const s = Math.sin(t); if(Math.abs(s)<1e-6) return 0; const v = Math.abs(Math.cos(Math.PI/2*Math.cos(t))/s); return (Math.cos(t)>=0)?v:0; },
+  patch:    t => Math.max(0, Math.cos(t)) * Math.abs(Math.cos(Math.PI/2*Math.sin(t))),
+  yagi:     t => { const fwd = Math.max(0, Math.cos(t - Math.PI/2)); return 0.15 + 0.85*Math.pow(fwd, 2.5); },
+  loop:     t => Math.abs(Math.sin(t)),
+};
+
+// dB scale: map dB value (-30..0) to radius fraction
+function dBtoR(dBval, dBmin) {
+  // dBval in dB (0 = max), dBmin = lowest ring shown (e.g. -30)
+  return Math.max(0, (dBval - dBmin) / (-dBmin));
+}
+
+// Animation state
+let patternAnim = { type: null, progress: 1, prevPoints: null, currPoints: null, rafId: null };
+
+function buildPatternPoints(type, R, cx, cy, steps=720) {
+  const fn = patternFuncs[type] || (() => 1);
+  const dBmin = -30;
+  let vals = [];
+  for(let a=0; a<=steps; a++) {
+    const theta = a/steps * 2*Math.PI;
+    const lin = fn(theta);
+    // Convert to dB (relative to max=1)
+    const dBval = lin < 1e-6 ? dBmin : Math.max(dBmin, 20*Math.log10(lin));
+    const frac = dBtoR(dBval, dBmin);
+    // theta=0 → top (north), rotate by -π/2
+    const drawAngle = theta - Math.PI/2;
+    vals.push({ x: cx + frac*R*Math.cos(drawAngle), y: cy + frac*R*Math.sin(drawAngle) });
+  }
+  return vals;
+}
+
+function lerpPoints(a, b, t) {
+  return a.map((p,i) => ({ x: p.x+(b[i].x-p.x)*t, y: p.y+(b[i].y-p.y)*t }));
+}
+
+function drawPattern(animated) {
   const canvas = document.getElementById('patternCanvas');
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   const cx = W/2, cy = H/2;
-  const R = Math.min(W,H)/2 - 20;
+  const R = Math.min(W,H)/2 - 38;
+  const dBmin = -30;
+  const dBrings = [0, -5, -10, -20, -30]; // dB values for rings
 
-  ctx.fillStyle = '#111827';
-  ctx.fillRect(0,0,W,H);
-
-  // Grid rings
-  for(let r=0.25; r<=1; r+=0.25) {
-    ctx.beginPath();
-    ctx.arc(cx, cy, R*r, 0, 2*Math.PI);
-    ctx.strokeStyle = 'rgba(0,229,255,0.1)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+  // If type changed, start animation
+  if(patternAnim.type !== currentAntType) {
+    if(patternAnim.rafId) cancelAnimationFrame(patternAnim.rafId);
+    patternAnim.prevPoints = patternAnim.currPoints || buildPatternPoints(patternAnim.type||currentAntType, R, cx, cy);
+    patternAnim.currPoints = buildPatternPoints(currentAntType, R, cx, cy);
+    patternAnim.type = currentAntType;
+    patternAnim.progress = 0;
+    animatePattern(ctx, W, H, cx, cy, R, dBmin, dBrings);
+    return;
   }
-  // Axes
-  ctx.strokeStyle = 'rgba(0,229,255,0.15)';
+  renderPattern(ctx, W, H, cx, cy, R, dBmin, dBrings, patternAnim.currPoints || buildPatternPoints(currentAntType, R, cx, cy), 1);
+}
+
+function animatePattern(ctx, W, H, cx, cy, R, dBmin, dBrings) {
+  patternAnim.progress += 0.045;
+  const t = Math.min(1, easeInOut(patternAnim.progress));
+  const pts = lerpPoints(patternAnim.prevPoints, patternAnim.currPoints, t);
+  renderPattern(ctx, W, H, cx, cy, R, dBmin, dBrings, pts, t);
+  if(patternAnim.progress < 1) {
+    patternAnim.rafId = requestAnimationFrame(() => animatePattern(ctx, W, H, cx, cy, R, dBmin, dBrings));
+  }
+}
+
+function easeInOut(t) { return t<0.5 ? 2*t*t : -1+(4-2*t)*t; }
+
+function renderPattern(ctx, W, H, cx, cy, R, dBmin, dBrings, pts, alpha) {
+  ctx.fillStyle = '#111827';
+  ctx.fillRect(0, 0, W, H);
+
+  // --- dB rings ---
+  dBrings.forEach((db, i) => {
+    const frac = dBtoR(db, dBmin);
+    const rr = frac * R;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rr, 0, 2*Math.PI);
+    ctx.strokeStyle = db === 0 ? 'rgba(0,229,255,0.25)' : 'rgba(0,229,255,0.1)';
+    ctx.lineWidth = db === 0 ? 1.5 : 1;
+    ctx.stroke();
+
+    // dB label (right side)
+    if(rr > 10) {
+      ctx.fillStyle = db === 0 ? '#00e5ff' : '#3a5a7a';
+      ctx.font = `${db===0?'bold ':''} 10px Space Mono`;
+      ctx.textAlign = 'left';
+      ctx.fillText(db === 0 ? '0 dB' : `${db}`, cx + rr + 3, cy - 3);
+    }
+  });
+
+  // --- Angle axes ---
+  ctx.strokeStyle = 'rgba(0,229,255,0.12)';
+  ctx.lineWidth = 1;
   for(let a=0; a<360; a+=30) {
-    const rad = a * Math.PI/180;
+    const rad = (a - 90) * Math.PI/180;
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(cx + R*Math.cos(rad), cy + R*Math.sin(rad));
     ctx.stroke();
   }
 
-  // Pattern function
-  function patternF(theta) {
-    const t = theta;
-    if(currentAntType === 'dipole') return Math.abs(Math.cos(Math.PI/2 * Math.cos(t)) / Math.sin(t + 0.001));
-    if(currentAntType === 'monopole') return Math.abs(Math.cos(Math.PI/2 * Math.cos(t)) / Math.sin(t + 0.001));
-    if(currentAntType === 'patch') return Math.abs(Math.cos(Math.PI/2 * Math.sin(t)));
-    if(currentAntType === 'yagi') {
-      const afw = 0.9, abk = 0.1;
-      return afw * Math.pow(Math.abs(Math.cos(t)), 2) + abk;
-    }
-    if(currentAntType === 'loop') return Math.abs(Math.sin(t));
-    return 1;
-  }
-
-  // Normalize
-  let maxF = 0;
-  for(let a=0; a<360; a++) maxF = Math.max(maxF, patternF(a*Math.PI/180));
-
+  // --- Pattern fill ---
   ctx.beginPath();
-  for(let a=0; a<=360; a++) {
-    const rad = a * Math.PI/180;
-    const r = patternF(rad) / maxF * R;
-    const x = cx + r * Math.cos(rad - Math.PI/2);
-    const y = cy + r * Math.sin(rad - Math.PI/2);
-    a===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
-  }
+  pts.forEach((p, i) => i===0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+  ctx.closePath();
+  ctx.fillStyle = `rgba(0,229,255,${0.07 * alpha})`;
+  ctx.fill();
+
+  // --- Pattern stroke ---
+  ctx.beginPath();
+  pts.forEach((p, i) => i===0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
   ctx.closePath();
   ctx.strokeStyle = '#00e5ff';
   ctx.lineWidth = 2;
   ctx.stroke();
-  ctx.fillStyle = 'rgba(0,229,255,0.08)';
-  ctx.fill();
 
-  // Labels
-  ctx.fillStyle = '#64748b';
+  // --- Angle labels ---
+  ctx.fillStyle = '#4a6a8a';
   ctx.font = '11px Space Mono';
   ctx.textAlign = 'center';
-  ctx.fillText('0°', cx, cy-R-6);
-  ctx.fillText('90°', cx+R+12, cy+4);
-  ctx.fillText('180°', cx, cy+R+14);
-  ctx.fillText('270°', cx-R-16, cy+4);
+  const labelR = R + 18;
+  [['0°',0],['30°',30],['60°',60],['90°',90],['120°',120],['150°',150],
+   ['180°',180],['210°',210],['240°',240],['270°',270],['300°',300],['330°',330]
+  ].forEach(([lbl, deg]) => {
+    const rad = (deg - 90) * Math.PI/180;
+    ctx.fillText(lbl, cx + labelR*Math.cos(rad), cy + labelR*Math.sin(rad) + 4);
+  });
+
+  // --- Antenna type label ---
+  const names = { dipole:'Dipole (E-plane)', monopole:'Monopole (上半)', patch:'Patch (H-plane)', yagi:'Yagi (方位面)', loop:'Loop (E-plane)' };
+  ctx.fillStyle = 'rgba(0,229,255,0.6)';
+  ctx.font = 'bold 11px Space Mono';
+  ctx.textAlign = 'left';
+  ctx.fillText(names[currentAntType]||currentAntType, 10, 16);
+  ctx.fillStyle = '#3a5a6a';
+  ctx.font = '10px Space Mono';
+  ctx.fillText('dB scale  (最外圈 = 0 dB)', 10, H-8);
 }
 
 // ============ PHASE ============
@@ -849,7 +946,8 @@ function drawPhaseWave() {
     ctx.beginPath();
     for(let x=0; x<W; x++) {
       const t = (x/W) * cycles * 2*Math.PI;
-      const y = cy - amp * Math.sin(t + phase*Math.PI/180);
+      // phase > 0 means delayed (lags behind reference), so subtract phase
+      const y = cy - amp * Math.sin(t - phase*Math.PI/180);
       x===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
     }
     ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
@@ -857,8 +955,8 @@ function drawPhaseWave() {
     ctx.fillText(label, 6, 35 + (color==='#00e5ff'?0:16));
   }
 
-  drawWave(0, '#00e5ff', '基準訊號');
-  drawWave(-phaseShift, '#ff6b35', `延遲訊號 (${phaseShift.toFixed(1)}°)`);
+  drawWave(0, '#00e5ff', '基準訊號 (0°)');
+  drawWave(phaseShift, '#ff6b35', `延遲訊號 (−${phaseShift.toFixed(1)}°)`);
 
   // Zero crossing markers
   ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1;
@@ -901,19 +999,41 @@ function calcMatch() {
 
   let matchInfo = '';
   if(currentMatchType === 'quarter') {
-    const Zm = Math.sqrt(Zs * ZL_r);
-    const Lq = lambda/4*1000;
-    matchInfo = `λ/4 變換器特性阻抗: ${Zm.toFixed(2)} Ω\n長度: ${Lq.toFixed(2)} mm`;
+    // λ/4 transformer only valid when ZL is purely real; use |ZL| as approximation
+    const ZL_mag = Math.sqrt(ZL_r*ZL_r + ZL_i*ZL_i);
+    const Zm = Math.sqrt(Zs * ZL_mag);
+    const Lq = (lambda/4)*1000;
+    matchInfo = `λ/4 變換器\n特性阻抗 Z_t = √(Z₀ × |ZL|) = ${Zm.toFixed(2)} Ω\n長度 = λ/4 = ${Lq.toFixed(2)} mm\n注意：若 ZL 有虛部，需先串聯元件消除虛部後再用 λ/4 變換器`;
     calcResults.matchQuarter = { Zm, Lq };
   } else if(currentMatchType === 'lmatch') {
-    const Q = Math.sqrt(ZL_r/Zs - 1);
-    const Xs = Q * Zs;
-    const Xp = ZL_r / Q;
-    matchInfo = `串聯電抗 Xs: ${Xs.toFixed(2)} Ω\n並聯電抗 Xp: ${Xp.toFixed(2)} Ω\nQ 值: ${Q.toFixed(3)}`;
+    // L-match: step-up (ZL_r > Zs) or step-down
+    if(ZL_r >= Zs) {
+      const Q = Math.sqrt(ZL_r/Zs - 1);
+      const Xs = Q * Zs;        // series element reactance
+      const Xp = ZL_r / Q;      // parallel element reactance
+      const Ls_nH = (Xs / (2*Math.PI*parseFloat(document.getElementById('m_freq').value)*1e6)) * 1e9;
+      const Cp_pF = (1 / (Xp * 2*Math.PI*parseFloat(document.getElementById('m_freq').value)*1e6)) * 1e12;
+      matchInfo = `L型匹配（ZL > Z₀，升壓型）\nQ 值 = ${Q.toFixed(3)}\n串聯電抗 Xs = ${Xs.toFixed(2)} Ω → L = ${Ls_nH.toFixed(2)} nH\n並聯電抗 Xp = ${Xp.toFixed(2)} Ω → C = ${Cp_pF.toFixed(2)} pF\n（虛部需另外補償）`;
+    } else {
+      const Q = Math.sqrt(Zs/ZL_r - 1);
+      const Xp = Zs / Q;
+      const Xs = Q * ZL_r;
+      matchInfo = `L型匹配（ZL < Z₀，降壓型）\nQ 值 = ${Q.toFixed(3)}\n並聯電抗 Xp = ${Xp.toFixed(2)} Ω\n串聯電抗 Xs = ${Xs.toFixed(2)} Ω`;
+    }
   } else if(currentMatchType === 'stub') {
-    const bL = ZL_i / (ZL_r*ZL_r + ZL_i*ZL_i);
-    const dStub = Math.atan(ZL_i/(ZL_r - Zs + 0.001)) / (2*Math.PI) * lambda;
-    matchInfo = `開路短截線長度: ${(Math.atan(-1/bL/Zs)/(2*Math.PI)*lambda*1000).toFixed(2)} mm\n短路短截線長度: ${(Math.atan(Zs*bL)/(2*Math.PI)*lambda*1000).toFixed(2)} mm`;
+    // Single-stub matching (shunt short-circuit stub)
+    // Step 1: find d (distance from load to stub)
+    const ZL_norm_r = ZL_r / Zs, ZL_norm_i = ZL_i / Zs;
+    const denom = ZL_norm_r*ZL_norm_r + ZL_norm_i*ZL_norm_i;
+    const GL = ZL_norm_r / (ZL_norm_r*ZL_norm_r + ZL_norm_i*ZL_norm_i);
+    const BL = -ZL_norm_i / denom;
+    // Stub position: solve for d where Re(Y_in) = 1
+    const t1 = (ZL_norm_i + Math.sqrt(ZL_norm_r*((1-ZL_norm_r)*(1-ZL_norm_r) + ZL_norm_i*ZL_norm_i))) / (ZL_norm_r + (1-ZL_norm_r)*(1-ZL_norm_r) + ZL_norm_i*ZL_norm_i - ZL_norm_r);
+    const d1 = Math.atan(t1 < 0 ? t1 + 2*Math.PI : t1) / (2*Math.PI) * lambda * 1000;
+    const Bstub = -(BL + (1 - ZL_norm_r*t1 - ZL_norm_i) / (ZL_norm_r + ZL_norm_i*t1));
+    const Lstub_sc = Math.atan(-1/Bstub) / (2*Math.PI) * lambda * 1000;
+    const Lstub_oc = Math.atan(Bstub) / (2*Math.PI) * lambda * 1000;
+    matchInfo = `單截線匹配（並聯截線）\n截線位置 d = ${Math.abs(d1).toFixed(2)} mm\n短路截線長度 = ${(Lstub_sc < 0 ? Lstub_sc + lambda*1000/2 : Lstub_sc).toFixed(2)} mm\n開路截線長度 = ${(Lstub_oc < 0 ? Lstub_oc + lambda*1000/2 : Lstub_oc).toFixed(2)} mm`;
   }
 
   calcResults.impedance = { Zs, ZL_r, ZL_i, gamma_mag, gamma_phase, VSWR, RL, f };
@@ -941,6 +1061,7 @@ function calcMatch() {
     </div>
   `;
 
+  document.getElementById('smithInfo').style.whiteSpace = 'pre-line';
   document.getElementById('smithInfo').textContent = matchInfo;
   drawSmith(gamma_r, gamma_i);
 }
@@ -955,58 +1076,65 @@ function drawSmith(gr, gi) {
   ctx.fillStyle = '#1a2235';
   ctx.fillRect(0,0,W,H);
 
-  // Outer circle
+  // Outer unit circle
   ctx.beginPath(); ctx.arc(cx,cy,R,0,2*Math.PI);
-  ctx.strokeStyle = '#1e3a5f'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.strokeStyle = '#2d4a6e'; ctx.lineWidth = 2; ctx.stroke();
 
-  // Resistance circles (r=0,0.5,1,2,∞)
-  const rVals = [0, 0.2, 0.5, 1, 2, 5];
-  rVals.forEach(r => {
-    const rad = R/(1+r);
-    const cenx = cx + R*r/(1+r);
-    ctx.beginPath(); ctx.arc(cenx, cy, rad, 0, 2*Math.PI);
-    ctx.strokeStyle = 'rgba(0,229,255,0.2)'; ctx.lineWidth = 1; ctx.stroke();
-    if(r < 5) {
-      ctx.fillStyle = '#64748b'; ctx.font = '10px Space Mono'; ctx.textAlign = 'left';
-      ctx.fillText(r, cenx - rad/2, cy + 10);
-    }
+  // Constant resistance circles: center=(r/(1+r)*R + cx, cy), radius=R/(1+r)
+  [0, 0.2, 0.5, 1, 2, 5].forEach(r => {
+    const circR = R/(1+r);
+    const circCx = cx + R*r/(1+r);
+    ctx.beginPath(); ctx.arc(circCx, cy, circR, 0, 2*Math.PI);
+    ctx.strokeStyle = 'rgba(0,229,255,0.18)'; ctx.lineWidth = 1; ctx.stroke();
+    // Label on real axis
+    ctx.fillStyle = '#4a90a4'; ctx.font = '9px Space Mono'; ctx.textAlign='center';
+    if(r < 5) ctx.fillText(r, circCx + circR, cy + 10);
   });
 
-  // Reactance arcs (x=±0.5,±1,±2)
-  const xVals = [0.5, 1, 2, -0.5, -1, -2];
-  xVals.forEach(x => {
-    const rArc = R/Math.abs(x);
-    const ceny = cy - R/x;
-    ctx.beginPath();
-    ctx.arc(cx+R, ceny, rArc, 0, 2*Math.PI);
-    ctx.strokeStyle = 'rgba(255,107,53,0.2)'; ctx.lineWidth = 1; ctx.stroke();
+  // Constant reactance arcs: center=(cx+R, cy-R/x), radius=R/|x|
+  [0.5, 1, 2, 5, -0.5, -1, -2, -5].forEach(x => {
+    const arcR = R/Math.abs(x);
+    const arcCy = cy - R/x;
+    ctx.beginPath(); ctx.arc(cx+R, arcCy, arcR, 0, 2*Math.PI);
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,2*Math.PI); ctx.clip();
+    ctx.beginPath(); ctx.arc(cx+R, arcCy, arcR, 0, 2*Math.PI);
+    ctx.strokeStyle = 'rgba(255,107,53,0.18)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.restore();
   });
 
-  // Horizontal axis
+  // Real axis
   ctx.beginPath(); ctx.moveTo(cx-R,cy); ctx.lineTo(cx+R,cy);
-  ctx.strokeStyle = 'rgba(0,229,255,0.3)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,229,255,0.3)'; ctx.lineWidth=1; ctx.stroke();
 
-  // Plot impedance point
+  // Center point (matched, Z=Z0)
+  ctx.beginPath(); ctx.arc(cx, cy, 5, 0, 2*Math.PI);
+  ctx.fillStyle = '#00e5ff'; ctx.fill();
+  ctx.fillStyle='#00e5ff'; ctx.font='10px Space Mono'; ctx.textAlign='left';
+  ctx.fillText('Z₀', cx+8, cy-6);
+
+  // Plot load impedance point (from reflection coefficient)
   const px = cx + gr * R;
   const py = cy - gi * R;
 
-  ctx.beginPath(); ctx.arc(px, py, 8, 0, 2*Math.PI);
-  ctx.fillStyle = '#ff6b35'; ctx.fill();
-  ctx.beginPath(); ctx.arc(px, py, 12, 0, 2*Math.PI);
-  ctx.strokeStyle = 'rgba(255,107,53,0.4)'; ctx.lineWidth = 2; ctx.stroke();
+  // Line from center to point
+  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(px,py);
+  ctx.strokeStyle='rgba(255,107,53,0.4)'; ctx.lineWidth=1; ctx.setLineDash([3,3]); ctx.stroke();
+  ctx.setLineDash([]);
 
-  // Center (50Ω matched point)
-  ctx.beginPath(); ctx.arc(cx, cy, 5, 0, 2*Math.PI);
-  ctx.fillStyle = '#00e5ff'; ctx.fill();
+  // Glow ring
+  ctx.beginPath(); ctx.arc(px, py, 10, 0, 2*Math.PI);
+  ctx.strokeStyle='rgba(255,107,53,0.3)'; ctx.lineWidth=3; ctx.stroke();
+  // Point
+  ctx.beginPath(); ctx.arc(px, py, 5, 0, 2*Math.PI);
+  ctx.fillStyle='#ff6b35'; ctx.fill();
+  ctx.fillStyle='#ff6b35'; ctx.font='bold 10px Space Mono'; ctx.textAlign='left';
+  ctx.fillText('ZL', px+8, py-6);
 
-  // Labels
-  ctx.fillStyle = '#64748b'; ctx.font = '10px Space Mono'; ctx.textAlign='center';
-  ctx.fillText('ΓL', cx-R-8, cy+4);
-  ctx.fillText('ΓR', cx+R+8, cy+4);
-  ctx.fillStyle = '#ff6b35'; ctx.font = 'bold 11px Space Mono';
-  ctx.fillText('ZL', px+14, py-8);
-  ctx.fillStyle = '#00e5ff';
-  ctx.fillText('Z₀', cx+14, cy-8);
+  // Corner labels
+  ctx.fillStyle='#64748b'; ctx.font='10px Space Mono'; ctx.textAlign='center';
+  ctx.fillText('SC (0)', cx-R, cy+16);
+  ctx.fillText('OC (∞)', cx+R, cy+16);
 }
 
 // ============ ARRAY ============
@@ -1017,10 +1145,17 @@ function calcArray() {
   const type = document.getElementById('arr_type').value;
 
   const psi0 = 2*Math.PI*d*Math.sin(theta0);
-  const directivity = Math.min(2*N*d, N*N*d*d) * 1.5;
-  const gain_dB = 10*Math.log10(directivity + 0.01);
-  const HPBW = 0.886 / (N*d) * 180/Math.PI;
-  const SLL = -13.26 - 20*Math.log10(N);
+  // Array Factor for uniform linear array
+  // AF_max = N (at main beam)
+  // Directivity for broadside ULA: D ≈ 2*N*d (in λ units) for d≤0.5λ
+  // For endfire: D ≈ 4*N*d
+  const isBroadside = Math.abs(theta0 * 180/Math.PI) < 5;
+  const D_linear = isBroadside ? 2*N*d : 4*N*d;
+  const gain_dB = 10*Math.log10(Math.max(D_linear, 1));
+  // HPBW for uniform ULA broadside (radians → degrees)
+  const HPBW = (0.886 / (N*d)) * (180/Math.PI);
+  // SLL for uniform weighting is always ~-13.26 dB (first sidelobe of sinc)
+  const SLL = -13.26;
 
   calcResults.array = { N, d, theta0: theta0*180/Math.PI, psi0, VSWR: 1.0 };
 
