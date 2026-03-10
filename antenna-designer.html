@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>天線設計工具</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e17;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --accent: #00e5ff;
+    --accent2: #ff6b35;
+    --accent3: #7c3aed;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --success: #10b981;
+    --warn: #f59e0b;
+    --border: #1e3a5f;
+    --mono: 'Space Mono', monospace;
+    --sans: 'Noto Sans TC', sans-serif;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events:none; z-index:0;
+  }
+
+  .container { max-width: 1200px; margin:0 auto; padding:0 20px; position:relative; z-index:1; }
+
+  /* Header */
+  header {
+    padding: 28px 0 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+  }
+  .header-inner { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .logo-mark {
+    width:44px; height:44px;
+    border: 2px solid var(--accent);
+    border-radius:8px;
+    display:flex; align-items:center; justify-content:center;
+    font-family: var(--mono); font-size:18px; color:var(--accent);
+    position:relative; overflow:hidden;
+  }
+  .logo-mark::after {
+    content:'';
+    position:absolute; inset:0;
+    background: var(--accent);
+    opacity:0.08;
+  }
+  h1 { font-family:var(--mono); font-size:22px; font-weight:700; letter-spacing:-0.5px; }
+  h1 span { color:var(--accent); }
+  .subtitle { font-size:13px; color:var(--muted); margin-top:2px; }
+
+  /* Tab nav */
+  .tab-nav {
+    display:flex; gap:4px; margin-bottom:28px;
+    background:var(--surface); padding:4px; border-radius:10px;
+    border:1px solid var(--border);
+    overflow-x:auto;
+  }
+  .tab-btn {
+    flex:1; min-width:110px; padding:9px 14px;
+    background:transparent; border:none; color:var(--muted);
+    cursor:pointer; border-radius:7px; font-family:var(--sans);
+    font-size:13px; font-weight:500; transition:all 0.2s;
+    white-space:nowrap;
+  }
+  .tab-btn.active {
+    background:var(--surface2);
+    color:var(--accent);
+    border:1px solid var(--border);
+  }
+  .tab-btn:hover:not(.active) { color:var(--text); }
+
+  .tab-panel { display:none; }
+  .tab-panel.active { display:block; }
+
+  /* Cards */
+  .card {
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:24px;
+    margin-bottom:20px;
+  }
+  .card-title {
+    font-family:var(--mono); font-size:13px;
+    color:var(--accent); letter-spacing:1px;
+    text-transform:uppercase; margin-bottom:18px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .card-title::before {
+    content:''; width:3px; height:14px;
+    background:var(--accent); border-radius:2px;
+  }
+
+  /* Grid layouts */
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  @media(max-width:700px) { .grid-2,.grid-3 { grid-template-columns:1fr; } }
+
+  /* Form controls */
+  .field { margin-bottom:16px; }
+  .field label {
+    display:block; font-size:12px; color:var(--muted);
+    margin-bottom:6px; font-weight:500;
+  }
+  .field input, .field select {
+    width:100%; padding:10px 14px;
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:8px; color:var(--text);
+    font-family:var(--mono); font-size:14px;
+    outline:none; transition:border 0.2s;
+  }
+  .field input:focus, .field select:focus { border-color:var(--accent); }
+  .field select option { background:var(--surface2); }
+
+  /* Buttons */
+  .btn {
+    padding:11px 24px; border:none; border-radius:8px;
+    cursor:pointer; font-family:var(--sans); font-weight:600;
+    font-size:14px; transition:all 0.2s;
+  }
+  .btn-primary {
+    background:var(--accent); color:#000;
+  }
+  .btn-primary:hover { background:#33eaff; transform:translateY(-1px); }
+  .btn-secondary {
+    background:transparent; color:var(--accent);
+    border:1px solid var(--accent);
+  }
+  .btn-secondary:hover { background:rgba(0,229,255,0.08); }
+  .btn-orange {
+    background:var(--accent2); color:#fff;
+  }
+  .btn-orange:hover { background:#ff8255; }
+
+  /* Result boxes */
+  .result-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-top:16px; }
+  .result-box {
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:10px; padding:16px;
+    position:relative; overflow:hidden;
+  }
+  .result-box::before {
+    content:''; position:absolute; top:0; left:0;
+    width:3px; height:100%; background:var(--accent);
+  }
+  .result-box.warn::before { background:var(--warn); }
+  .result-box.success::before { background:var(--success); }
+  .result-label { font-size:11px; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px; }
+  .result-value { font-family:var(--mono); font-size:20px; font-weight:700; color:var(--text); }
+  .result-unit { font-size:11px; color:var(--muted); margin-top:2px; }
+
+  /* Canvas */
+  canvas {
+    width:100%; height:auto; display:block;
+    border-radius:8px;
+  }
+
+  /* Phase diagram */
+  .phase-viz {
+    background:var(--surface2);
+    border:1px solid var(--border);
+    border-radius:10px; padding:16px;
+    margin-top:16px;
+  }
+
+  /* Smith chart label */
+  .smith-info {
+    font-size:12px; color:var(--muted);
+    line-height:1.7; margin-top:12px;
+  }
+
+  /* Explainer */
+  .explainer {
+    background: linear-gradient(135deg, rgba(0,229,255,0.05), rgba(124,58,237,0.05));
+    border:1px solid rgba(0,229,255,0.2);
+    border-radius:10px; padding:20px; margin-top:16px;
+  }
+  .explainer h4 { font-size:14px; color:var(--accent); margin-bottom:10px; }
+  .explainer p { font-size:13px; line-height:1.8; color:var(--text); }
+  .explainer .analogy {
+    margin-top:10px; padding:12px;
+    background:rgba(0,0,0,0.3); border-radius:8px;
+    font-size:13px; color:var(--accent2);
+    line-height:1.7;
+  }
+
+  /* Antenna type selector */
+  .antenna-types { display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap; }
+  .antenna-type-btn {
+    padding:8px 18px; border-radius:20px;
+    border:1px solid var(--border);
+    background:transparent; color:var(--muted);
+    cursor:pointer; font-size:13px; font-family:var(--sans);
+    transition:all 0.2s;
+  }
+  .antenna-type-btn.active {
+    border-color:var(--accent); color:var(--accent);
+    background:rgba(0,229,255,0.08);
+  }
+
+  /* Report */
+  #reportOutput {
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:10px; padding:20px; margin-top:16px;
+    font-size:13px; line-height:1.9; white-space:pre-wrap;
+    font-family:var(--sans); color:var(--text);
+    max-height:500px; overflow-y:auto;
+    display:none;
+  }
+
+  /* Phasor canvas wrapper */
+  .phasor-wrap {
+    display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;
+  }
+  .phasor-wrap canvas { flex:1; min-width:200px; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width:6px; height:6px; }
+  ::-webkit-scrollbar-track { background:var(--surface); }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+  /* Badge */
+  .badge {
+    display:inline-block; padding:2px 8px;
+    border-radius:10px; font-size:11px; font-family:var(--mono);
+    background:rgba(0,229,255,0.1); color:var(--accent);
+    border:1px solid rgba(0,229,255,0.2);
+  }
+  .badge.orange { background:rgba(255,107,53,0.1); color:var(--accent2); border-color:rgba(255,107,53,0.2); }
+
+  .sep { height:1px; background:var(--border); margin:20px 0; }
+  .flex-row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .mt { margin-top:12px; }
+  .range-row { display:flex; gap:10px; align-items:center; }
+  .range-row input[type=range] { flex:1; accent-color:var(--accent); }
+  .range-val { font-family:var(--mono); font-size:13px; color:var(--accent); min-width:50px; text-align:right; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="header-inner">
+      <div class="logo-mark">λ/4</div>
+      <div>
+        <h1>ANTENNA <span>DESIGNER</span></h1>
+        <div class="subtitle">天線設計計算工具 — 阻抗匹配 · 相位分析 · 陣列設計</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('calc')">📐 基本計算</button>
+    <button class="tab-btn" onclick="switchTab('phase')">🔄 相位分析</button>
+    <button class="tab-btn" onclick="switchTab('impedance')">⚡ 阻抗匹配</button>
+    <button class="tab-btn" onclick="switchTab('array')">📡 陣列天線</button>
+    <button class="tab-btn" onclick="switchTab('explain')">💡 非本科解說</button>
+    <button class="tab-btn" onclick="switchTab('report')">📋 報告產生</button>
+  </div>
+
+  <!-- ============ TAB 1: 基本計算 ============ -->
+  <div class="tab-panel active" id="tab-calc">
+    <div class="card">
+      <div class="card-title">天線類型選擇</div>
+      <div class="antenna-types">
+        <button class="antenna-type-btn active" onclick="setAntType('dipole',this)">偶極天線 Dipole</button>
+        <button class="antenna-type-btn" onclick="setAntType('monopole',this)">單極天線 Monopole</button>
+        <button class="antenna-type-btn" onclick="setAntType('patch',this)">微帶天線 Patch</button>
+        <button class="antenna-type-btn" onclick="setAntType('yagi',this)">八木天線 Yagi</button>
+        <button class="antenna-type-btn" onclick="setAntType('loop',this)">環形天線 Loop</button>
+      </div>
+
+      <div id="antDesc" class="explainer" style="margin-top:0; margin-bottom:16px;">
+        <h4>偶極天線（Dipole）</h4>
+        <p>最基本的天線形式，由兩段等長導線組成。半波偶極（λ/2 Dipole）阻抗約 73Ω，增益 2.15 dBi。</p>
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label>工作頻率 (MHz)</label>
+          <input type="number" id="freq" value="2400" min="1" max="100000" oninput="calcAntenna()">
+        </div>
+        <div class="field">
+          <label>介電常數 εr（微帶天線用）</label>
+          <input type="number" id="er" value="4.4" min="1" max="20" step="0.1" oninput="calcAntenna()">
+        </div>
+        <div class="field">
+          <label>導線半徑 a (mm)</label>
+          <input type="number" id="wireR" value="0.5" min="0.01" max="10" step="0.01" oninput="calcAntenna()">
+        </div>
+        <div class="field">
+          <label>基板厚度 h (mm)（微帶用）</label>
+          <input type="number" id="subH" value="1.6" min="0.1" max="20" step="0.1" oninput="calcAntenna()">
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="calcAntenna()">計算</button>
+    </div>
+
+    <div class="card" id="calcResults">
+      <div class="card-title">計算結果</div>
+      <div class="result-grid" id="resultGrid"></div>
+      <div class="sep"></div>
+      <canvas id="patternCanvas" width="500" height="250"></canvas>
+    </div>
+  </div>
+
+  <!-- ============ TAB 2: 相位 ============ -->
+  <div class="tab-panel" id="tab-phase">
+    <div class="card">
+      <div class="card-title">相位分析器</div>
+      <p style="font-size:13px; color:var(--muted); margin-bottom:20px;">輸入傳輸線參數，計算相位延遲與波長關係</p>
+      <div class="grid-3">
+        <div class="field">
+          <label>頻率 (MHz)</label>
+          <input type="number" id="ph_freq" value="2400" oninput="calcPhase()">
+        </div>
+        <div class="field">
+          <label>傳輸線長度 (mm)</label>
+          <input type="number" id="ph_len" value="30" oninput="calcPhase()">
+        </div>
+        <div class="field">
+          <label>有效介電常數 εeff</label>
+          <input type="number" id="ph_er" value="3.2" step="0.1" oninput="calcPhase()">
+        </div>
+      </div>
+      <div class="result-grid" id="phaseResults"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">相量視覺化</div>
+      <div class="phasor-wrap">
+        <div style="flex:1; min-width:220px;">
+          <div class="field">
+            <label>訊號 A 相位 (°)</label>
+            <div class="range-row">
+              <input type="range" id="phA" min="0" max="360" value="0" oninput="drawPhasors()">
+              <span class="range-val" id="phA_v">0°</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>訊號 A 振幅</label>
+            <div class="range-row">
+              <input type="range" id="ampA" min="0" max="100" value="80" oninput="drawPhasors()">
+              <span class="range-val" id="ampA_v">80</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>訊號 B 相位 (°)</label>
+            <div class="range-row">
+              <input type="range" id="phB" min="0" max="360" value="90" oninput="drawPhasors()">
+              <span class="range-val" id="phB_v">90°</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>訊號 B 振幅</label>
+            <div class="range-row">
+              <input type="range" id="ampB" min="0" max="100" value="60" oninput="drawPhasors()">
+              <span class="range-val" id="ampB_v">60</span>
+            </div>
+          </div>
+        </div>
+        <canvas id="phasorCanvas" width="300" height="300" style="max-width:300px;"></canvas>
+      </div>
+      <div class="result-grid" id="phasorResults" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">相位與波長對照表</div>
+      <canvas id="phaseWaveCanvas" width="700" height="180"></canvas>
+    </div>
+  </div>
+
+  <!-- ============ TAB 3: 阻抗匹配 ============ -->
+  <div class="tab-panel" id="tab-impedance">
+    <div class="card">
+      <div class="card-title">阻抗匹配計算</div>
+      <div class="antenna-types">
+        <button class="antenna-type-btn active" onclick="setMatchType('quarter',this)">λ/4 變換器</button>
+        <button class="antenna-type-btn" onclick="setMatchType('lmatch',this)">L型匹配</button>
+        <button class="antenna-type-btn" onclick="setMatchType('stub',this)">短截線匹配</button>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label>訊號源阻抗 Zs (Ω)</label>
+          <input type="number" id="zs" value="50" oninput="calcMatch()">
+        </div>
+        <div class="field">
+          <label>天線阻抗 ZL (實部) (Ω)</label>
+          <input type="number" id="zl_r" value="73" oninput="calcMatch()">
+        </div>
+        <div class="field">
+          <label>天線阻抗 ZL (虛部) (Ω)</label>
+          <input type="number" id="zl_i" value="42.5" oninput="calcMatch()">
+        </div>
+        <div class="field">
+          <label>頻率 (MHz)</label>
+          <input type="number" id="m_freq" value="2400" oninput="calcMatch()">
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="calcMatch()">計算匹配網路</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">匹配結果</div>
+      <div class="result-grid" id="matchResults"></div>
+      <div class="sep"></div>
+      <div class="card-title" style="margin-top:0;">Smith Chart（簡化）</div>
+      <canvas id="smithCanvas" width="400" height="400" style="max-width:400px; margin:0 auto; display:block;"></canvas>
+      <div class="smith-info" id="smithInfo"></div>
+    </div>
+  </div>
+
+  <!-- ============ TAB 4: 陣列天線 ============ -->
+  <div class="tab-panel" id="tab-array">
+    <div class="card">
+      <div class="card-title">陣列天線設計</div>
+      <div class="grid-3">
+        <div class="field">
+          <label>天線元素數量 N</label>
+          <input type="number" id="arr_n" value="4" min="2" max="16" oninput="calcArray()">
+        </div>
+        <div class="field">
+          <label>元素間距 d (λ 倍數)</label>
+          <input type="number" id="arr_d" value="0.5" min="0.1" max="2" step="0.05" oninput="calcArray()">
+        </div>
+        <div class="field">
+          <label>掃描角度 θ₀ (°)</label>
+          <input type="number" id="arr_theta" value="0" min="-90" max="90" oninput="calcArray()">
+        </div>
+      </div>
+      <div class="field">
+        <label>陣列排列</label>
+        <select id="arr_type" onchange="calcArray()">
+          <option value="linear">線性陣列（Linear Array）</option>
+          <option value="planar">平面陣列（Planar Array）</option>
+          <option value="circular">環形陣列（Circular Array）</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="calcArray()">計算方向圖</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">陣列方向圖</div>
+      <div class="result-grid" id="arrayResults"></div>
+      <div class="sep"></div>
+      <canvas id="arrayPatternCanvas" width="600" height="300"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="card-title">相位激發計算</div>
+      <p style="font-size:13px; color:var(--muted); margin-bottom:12px;">各元素所需相位差（用於波束掃描）</p>
+      <div id="phaseExcitation" style="font-family:var(--mono); font-size:13px; color:var(--text); line-height:2;"></div>
+    </div>
+  </div>
+
+  <!-- ============ TAB 5: 非本科解說 ============ -->
+  <div class="tab-panel" id="tab-explain">
+    <div class="card">
+      <div class="card-title">概念解說（給非本科人員）</div>
+      <div class="antenna-types">
+        <button class="antenna-type-btn active" onclick="showExplain('wavelength',this)">波長</button>
+        <button class="antenna-type-btn" onclick="showExplain('impedance',this)">阻抗匹配</button>
+        <button class="antenna-type-btn" onclick="showExplain('phase',this)">相位</button>
+        <button class="antenna-type-btn" onclick="showExplain('gain',this)">增益</button>
+        <button class="antenna-type-btn" onclick="showExplain('vswr',this)">VSWR</button>
+        <button class="antenna-type-btn" onclick="showExplain('array',this)">陣列</button>
+      </div>
+      <div id="explainContent"></div>
+    </div>
+  </div>
+
+  <!-- ============ TAB 6: 報告 ============ -->
+  <div class="tab-panel" id="tab-report">
+    <div class="card">
+      <div class="card-title">設計報告產生器</div>
+      <div class="grid-2">
+        <div class="field">
+          <label>報告標題</label>
+          <input type="text" id="rpt_title" value="天線設計規格報告" style="font-family:var(--sans);">
+        </div>
+        <div class="field">
+          <label>設計者</label>
+          <input type="text" id="rpt_author" value="" style="font-family:var(--sans);" placeholder="姓名">
+        </div>
+        <div class="field">
+          <label>專案名稱</label>
+          <input type="text" id="rpt_project" value="" style="font-family:var(--sans);" placeholder="專案/產品名稱">
+        </div>
+        <div class="field">
+          <label>報告語言</label>
+          <select id="rpt_lang">
+            <option value="zh">中文</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>報告內容選項</label>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:8px;">
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+            <input type="checkbox" id="rpt_basic" checked> 基本參數
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+            <input type="checkbox" id="rpt_impedance" checked> 阻抗匹配
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+            <input type="checkbox" id="rpt_phase" checked> 相位分析
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+            <input type="checkbox" id="rpt_array"> 陣列設計
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+            <input type="checkbox" id="rpt_explain" checked> 非本科說明
+          </label>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="generateReport()">生成報告</button>
+      <button class="btn btn-secondary" style="margin-left:10px;" onclick="copyReport()">複製文字</button>
+    </div>
+    <pre id="reportOutput"></pre>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+// ============ STATE ============
+let currentAntType = 'dipole';
+let currentMatchType = 'quarter';
+let calcResults = {};
+
+// ============ TAB SWITCHING ============
+function switchTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  event.target.classList.add('active');
+
+  if(id === 'phase') { calcPhase(); drawPhasors(); drawPhaseWave(); }
+  if(id === 'impedance') { calcMatch(); }
+  if(id === 'array') { calcArray(); }
+  if(id === 'explain') { showExplain('wavelength', document.querySelector('#tab-explain .antenna-type-btn')); }
+}
+
+// ============ ANTENNA TYPE ============
+const antDescriptions = {
+  dipole: { name:'偶極天線（Dipole）', desc:'最基本的天線形式，由兩段等長導線組成。半波偶極（λ/2）阻抗約 73+j42.5 Ω，增益 2.15 dBi。廣泛用於參考標準。' },
+  monopole: { name:'單極天線（Monopole）', desc:'偶極的一半，需要接地面反射。λ/4 單極阻抗約 36.5 Ω，增益 5.15 dBi（含地面）。手機、車載天線常用。' },
+  patch: { name:'微帶天線（Patch）', desc:'印在PCB基板上的方形金屬貼片，阻抗約 100-300 Ω，需匹配到 50 Ω。適合平面整合，WiFi/GPS 廣泛使用。' },
+  yagi: { name:'八木天線（Yagi-Uda）', desc:'由驅動元素、反射器和多個導向器組成的高增益天線。增益可達 7-15 dBi，方向性強，用於 UHF 電視天線等。' },
+  loop: { name:'環形天線（Loop）', desc:'環形導線天線，小型環阻抗極小（<1 Ω），需要升壓匹配。諧振環（周長≈λ）阻抗約 100 Ω，增益 2-3 dBi。' }
+};
+
+function setAntType(type, el) {
+  currentAntType = type;
+  document.querySelectorAll('#tab-calc .antenna-type-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  const d = antDescriptions[type];
+  document.getElementById('antDesc').innerHTML = `<h4>${d.name}</h4><p>${d.desc}</p>`;
+  calcAntenna();
+}
+
+// ============ ANTENNA CALCULATION ============
+function calcAntenna() {
+  const f = parseFloat(document.getElementById('freq').value) * 1e6;
+  const er = parseFloat(document.getElementById('er').value);
+  const wireR = parseFloat(document.getElementById('wireR').value) * 1e-3;
+  const subH = parseFloat(document.getElementById('subH').value) * 1e-3;
+  const c = 3e8;
+  const lambda = c / f;
+
+  let results = {};
+
+  if(currentAntType === 'dipole') {
+    results = {
+      'λ（自由空間）': { v: (lambda*1000).toFixed(1), u:'mm' },
+      'λ/2 長度': { v: (lambda/2*1000).toFixed(1), u:'mm' },
+      '輸入阻抗 Zin': { v: '73 + j42.5', u:'Ω' },
+      '增益': { v: '2.15', u:'dBi' },
+      '方向係數 D': { v: '1.64', u:'(線性)' },
+      '半功率波束寬': { v: '78', u:'°' },
+    };
+    calcResults.dipole = results;
+  } else if(currentAntType === 'monopole') {
+    results = {
+      'λ（自由空間）': { v: (lambda*1000).toFixed(1), u:'mm' },
+      'λ/4 長度': { v: (lambda/4*1000).toFixed(1), u:'mm' },
+      '輸入阻抗 Zin': { v: '36.5 + j21', u:'Ω' },
+      '增益': { v: '5.15', u:'dBi' },
+      '半功率波束寬': { v: '48', u:'°（仰角）' },
+    };
+  } else if(currentAntType === 'patch') {
+    const er_eff = (er+1)/2 + (er-1)/2 * Math.pow(1 + 12*subH/(lambda/2), -0.5);
+    const Leff = c/(2*f*Math.sqrt(er_eff));
+    const dL = 0.412 * subH * (er_eff+0.3)*(Leff/subH+0.264) / ((er_eff-0.258)*(Leff/subH+0.8));
+    const L = Leff - 2*dL;
+    const W = c/(2*f) * Math.sqrt(2/(er+1));
+    results = {
+      'λ（介質中）': { v: (c/f/Math.sqrt(er_eff)*1000).toFixed(2), u:'mm' },
+      '貼片長度 L': { v: (L*1000).toFixed(2), u:'mm' },
+      '貼片寬度 W': { v: (W*1000).toFixed(2), u:'mm' },
+      '有效介電常數': { v: er_eff.toFixed(3), u:'' },
+      '輸入阻抗': { v: '~100-300', u:'Ω (邊饋)' },
+      '增益': { v: '5-6', u:'dBi' },
+    };
+  } else if(currentAntType === 'yagi') {
+    const Ldriven = (0.473 * lambda * 1000).toFixed(1);
+    const Lrefl = (0.5 * lambda * 1000).toFixed(1);
+    const Ldir = (0.440 * lambda * 1000).toFixed(1);
+    results = {
+      '驅動元素長度': { v: Ldriven, u:'mm' },
+      '反射器長度': { v: Lrefl, u:'mm' },
+      '導向器長度': { v: Ldir, u:'mm' },
+      '估計增益（3元）': { v: '7.1', u:'dBi' },
+      '前後比': { v: '>10', u:'dB' },
+      '阻抗': { v: '50-75', u:'Ω' },
+    };
+  } else if(currentAntType === 'loop') {
+    const a = wireR;
+    const Lloop = lambda * 1000;
+    results = {
+      '諧振周長（≈λ）': { v: Lloop.toFixed(1), u:'mm' },
+      '半徑': { v: (Lloop/(2*Math.PI)).toFixed(1), u:'mm' },
+      '阻抗': { v: '~100', u:'Ω' },
+      '增益': { v: '2-3', u:'dBi' },
+      '極化': { v: '線極化', u:'' },
+    };
+  }
+
+  calcResults.lastCalc = { freq: f, lambda, type: currentAntType, results };
+
+  const grid = document.getElementById('resultGrid');
+  grid.innerHTML = Object.entries(results).map(([k,v]) =>
+    `<div class="result-box"><div class="result-label">${k}</div><div class="result-value">${v.v}</div><div class="result-unit">${v.u}</div></div>`
+  ).join('');
+
+  drawPattern();
+}
+
+// ============ RADIATION PATTERN ============
+function drawPattern() {
+  const canvas = document.getElementById('patternCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const cx = W/2, cy = H/2;
+  const R = Math.min(W,H)/2 - 20;
+
+  ctx.fillStyle = '#111827';
+  ctx.fillRect(0,0,W,H);
+
+  // Grid rings
+  for(let r=0.25; r<=1; r+=0.25) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, R*r, 0, 2*Math.PI);
+    ctx.strokeStyle = 'rgba(0,229,255,0.1)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  // Axes
+  ctx.strokeStyle = 'rgba(0,229,255,0.15)';
+  for(let a=0; a<360; a+=30) {
+    const rad = a * Math.PI/180;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + R*Math.cos(rad), cy + R*Math.sin(rad));
+    ctx.stroke();
+  }
+
+  // Pattern function
+  function patternF(theta) {
+    const t = theta;
+    if(currentAntType === 'dipole') return Math.abs(Math.cos(Math.PI/2 * Math.cos(t)) / Math.sin(t + 0.001));
+    if(currentAntType === 'monopole') return Math.abs(Math.cos(Math.PI/2 * Math.cos(t)) / Math.sin(t + 0.001));
+    if(currentAntType === 'patch') return Math.abs(Math.cos(Math.PI/2 * Math.sin(t)));
+    if(currentAntType === 'yagi') {
+      const afw = 0.9, abk = 0.1;
+      return afw * Math.pow(Math.abs(Math.cos(t)), 2) + abk;
+    }
+    if(currentAntType === 'loop') return Math.abs(Math.sin(t));
+    return 1;
+  }
+
+  // Normalize
+  let maxF = 0;
+  for(let a=0; a<360; a++) maxF = Math.max(maxF, patternF(a*Math.PI/180));
+
+  ctx.beginPath();
+  for(let a=0; a<=360; a++) {
+    const rad = a * Math.PI/180;
+    const r = patternF(rad) / maxF * R;
+    const x = cx + r * Math.cos(rad - Math.PI/2);
+    const y = cy + r * Math.sin(rad - Math.PI/2);
+    a===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.closePath();
+  ctx.strokeStyle = '#00e5ff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(0,229,255,0.08)';
+  ctx.fill();
+
+  // Labels
+  ctx.fillStyle = '#64748b';
+  ctx.font = '11px Space Mono';
+  ctx.textAlign = 'center';
+  ctx.fillText('0°', cx, cy-R-6);
+  ctx.fillText('90°', cx+R+12, cy+4);
+  ctx.fillText('180°', cx, cy+R+14);
+  ctx.fillText('270°', cx-R-16, cy+4);
+}
+
+// ============ PHASE ============
+function calcPhase() {
+  const f = parseFloat(document.getElementById('ph_freq').value) * 1e6;
+  const L = parseFloat(document.getElementById('ph_len').value) * 1e-3;
+  const er = parseFloat(document.getElementById('ph_er').value);
+  const c = 3e8;
+
+  const vp = c / Math.sqrt(er);
+  const lambda = vp / f;
+  const beta = 2 * Math.PI / lambda;
+  const phaseShift = beta * L * 180 / Math.PI;
+  const lambdaFraction = L / lambda;
+  const groupDelay = L / vp * 1e12; // ps
+
+  calcResults.phase = { f, L, er, phaseShift, lambdaFraction, lambda };
+
+  document.getElementById('phaseResults').innerHTML = `
+    <div class="result-box"><div class="result-label">相位延遲</div><div class="result-value">${phaseShift.toFixed(2)}</div><div class="result-unit">度 (°)</div></div>
+    <div class="result-box success"><div class="result-label">等效波長分數</div><div class="result-value">${lambdaFraction.toFixed(4)}</div><div class="result-unit">λ</div></div>
+    <div class="result-box"><div class="result-label">相速度</div><div class="result-value">${(vp/c*100).toFixed(1)}</div><div class="result-unit">% c</div></div>
+    <div class="result-box warn"><div class="result-label">群延遲</div><div class="result-value">${groupDelay.toFixed(2)}</div><div class="result-unit">ps</div></div>
+    <div class="result-box"><div class="result-label">介質中波長</div><div class="result-value">${(lambda*1000).toFixed(2)}</div><div class="result-unit">mm</div></div>
+    <div class="result-box"><div class="result-label">相位常數 β</div><div class="result-value">${beta.toFixed(2)}</div><div class="result-unit">rad/m</div></div>
+  `;
+  drawPhaseWave();
+}
+
+// ============ PHASORS ============
+function drawPhasors() {
+  const phA = parseFloat(document.getElementById('phA').value);
+  const ampA = parseFloat(document.getElementById('ampA').value);
+  const phB = parseFloat(document.getElementById('phB').value);
+  const ampB = parseFloat(document.getElementById('ampB').value);
+
+  document.getElementById('phA_v').textContent = phA + '°';
+  document.getElementById('phB_v').textContent = phB + '°';
+  document.getElementById('ampA_v').textContent = ampA;
+  document.getElementById('ampB_v').textContent = ampB;
+
+  const canvas = document.getElementById('phasorCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const cx = W/2, cy = H/2;
+  const R = Math.min(W,H)/2 - 20;
+
+  ctx.fillStyle = '#1a2235';
+  ctx.fillRect(0,0,W,H);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(0,229,255,0.08)';
+  ctx.lineWidth = 1;
+  for(let r=0.25; r<=1; r+=0.25) { ctx.beginPath(); ctx.arc(cx,cy,R*r,0,2*Math.PI); ctx.stroke(); }
+  ctx.beginPath(); ctx.moveTo(20,cy); ctx.lineTo(W-20,cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,20); ctx.lineTo(cx,H-20); ctx.stroke();
+
+  function drawArrow(ctx, cx, cy, angle, mag, color, label) {
+    const rad = (angle - 90) * Math.PI/180;
+    const scale = mag/100 * R;
+    const ex = cx + scale * Math.cos(rad);
+    const ey = cy + scale * Math.sin(rad);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(ex, ey);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    // Arrowhead
+    const alen = 12, awidth = 5;
+    const ax1 = ex - alen*Math.cos(rad) + awidth*Math.cos(rad+Math.PI/2);
+    const ay1 = ey - alen*Math.sin(rad) + awidth*Math.sin(rad+Math.PI/2);
+    const ax2 = ex - alen*Math.cos(rad) - awidth*Math.cos(rad+Math.PI/2);
+    const ay2 = ey - alen*Math.sin(rad) - awidth*Math.sin(rad+Math.PI/2);
+    ctx.beginPath(); ctx.moveTo(ex,ey); ctx.lineTo(ax1,ay1); ctx.lineTo(ax2,ay2); ctx.closePath();
+    ctx.fillStyle = color; ctx.fill();
+    ctx.fillStyle = color; ctx.font = 'bold 12px Space Mono'; ctx.textAlign = 'center';
+    ctx.fillText(label, ex + 15*Math.cos(rad), ey + 15*Math.sin(rad));
+  }
+
+  drawArrow(ctx, cx, cy, phA, ampA, '#00e5ff', 'A');
+  drawArrow(ctx, cx, cy, phB, ampB, '#ff6b35', 'B');
+
+  // Resultant
+  const rAx = ampA * Math.cos((phA-90)*Math.PI/180);
+  const rAy = ampA * Math.sin((phA-90)*Math.PI/180);
+  const rBx = ampB * Math.cos((phB-90)*Math.PI/180);
+  const rBy = ampB * Math.sin((phB-90)*Math.PI/180);
+  const rx = rAx + rBx, ry = rAy + rBy;
+  const rMag = Math.sqrt(rx*rx+ry*ry);
+  const rAngle = Math.atan2(ry, rx) * 180/Math.PI + 90;
+
+  drawArrow(ctx, cx, cy, rAngle, rMag, '#7c3aed', 'R');
+
+  const phaseDiff = phB - phA;
+  document.getElementById('phasorResults').innerHTML = `
+    <div class="result-box"><div class="result-label">相位差 Δφ</div><div class="result-value">${phaseDiff.toFixed(1)}</div><div class="result-unit">°</div></div>
+    <div class="result-box success"><div class="result-label">合成振幅</div><div class="result-value">${rMag.toFixed(1)}</div><div class="result-unit">(線性)</div></div>
+    <div class="result-box"><div class="result-label">合成相位</div><div class="result-value">${(rAngle % 360).toFixed(1)}</div><div class="result-unit">°</div></div>
+  `;
+}
+
+// ============ PHASE WAVE ============
+function drawPhaseWave() {
+  const canvas = document.getElementById('phaseWaveCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const phaseShift = calcResults.phase ? calcResults.phase.phaseShift : 90;
+
+  ctx.fillStyle = '#111827';
+  ctx.fillRect(0,0,W,H);
+
+  const cy = H/2, amp = H/2 - 30;
+  const cycles = 2;
+
+  ctx.fillStyle = '#1e3a5f';
+  ctx.fillRect(0, 20, W, H-40);
+
+  function drawWave(phase, color, label) {
+    ctx.beginPath();
+    for(let x=0; x<W; x++) {
+      const t = (x/W) * cycles * 2*Math.PI;
+      const y = cy - amp * Math.sin(t + phase*Math.PI/180);
+      x===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = color; ctx.font = '11px Space Mono';
+    ctx.fillText(label, 6, 35 + (color==='#00e5ff'?0:16));
+  }
+
+  drawWave(0, '#00e5ff', '基準訊號');
+  drawWave(-phaseShift, '#ff6b35', `延遲訊號 (${phaseShift.toFixed(1)}°)`);
+
+  // Zero crossing markers
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1;
+  for(let c=0; c<=cycles; c++) {
+    const x = c/cycles * W;
+    ctx.beginPath(); ctx.moveTo(x,20); ctx.lineTo(x,H-20); ctx.stroke();
+    ctx.fillStyle = '#64748b'; ctx.font = '10px Space Mono'; ctx.textAlign='center';
+    ctx.fillText(c+'λ', x, H-6);
+  }
+}
+
+// ============ IMPEDANCE MATCHING ============
+function setMatchType(type, el) {
+  currentMatchType = type;
+  document.querySelectorAll('#tab-impedance .antenna-type-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  calcMatch();
+}
+
+function calcMatch() {
+  const Zs = parseFloat(document.getElementById('zs').value);
+  const ZL_r = parseFloat(document.getElementById('zl_r').value);
+  const ZL_i = parseFloat(document.getElementById('zl_i').value);
+  const f = parseFloat(document.getElementById('m_freq').value) * 1e6;
+  const c = 3e8;
+  const lambda = c / f;
+  const omega = 2 * Math.PI * f;
+
+  // Reflection coefficient
+  const ZL = { r: ZL_r, i: ZL_i };
+  const num_r = ZL_r - Zs, num_i = ZL_i;
+  const den_r = ZL_r + Zs, den_i = ZL_i;
+  const den2 = den_r*den_r + den_i*den_i;
+  const gamma_r = (num_r*den_r + num_i*den_i)/den2;
+  const gamma_i = (num_i*den_r - num_r*den_i)/den2;
+  const gamma_mag = Math.sqrt(gamma_r*gamma_r + gamma_i*gamma_i);
+  const gamma_phase = Math.atan2(gamma_i, gamma_r) * 180/Math.PI;
+  const VSWR = (1+gamma_mag)/(1-gamma_mag+0.0001);
+  const RL = -20*Math.log10(gamma_mag+0.0001);
+
+  let matchInfo = '';
+  if(currentMatchType === 'quarter') {
+    const Zm = Math.sqrt(Zs * ZL_r);
+    const Lq = lambda/4*1000;
+    matchInfo = `λ/4 變換器特性阻抗: ${Zm.toFixed(2)} Ω\n長度: ${Lq.toFixed(2)} mm`;
+    calcResults.matchQuarter = { Zm, Lq };
+  } else if(currentMatchType === 'lmatch') {
+    const Q = Math.sqrt(ZL_r/Zs - 1);
+    const Xs = Q * Zs;
+    const Xp = ZL_r / Q;
+    matchInfo = `串聯電抗 Xs: ${Xs.toFixed(2)} Ω\n並聯電抗 Xp: ${Xp.toFixed(2)} Ω\nQ 值: ${Q.toFixed(3)}`;
+  } else if(currentMatchType === 'stub') {
+    const bL = ZL_i / (ZL_r*ZL_r + ZL_i*ZL_i);
+    const dStub = Math.atan(ZL_i/(ZL_r - Zs + 0.001)) / (2*Math.PI) * lambda;
+    matchInfo = `開路短截線長度: ${(Math.atan(-1/bL/Zs)/(2*Math.PI)*lambda*1000).toFixed(2)} mm\n短路短截線長度: ${(Math.atan(Zs*bL)/(2*Math.PI)*lambda*1000).toFixed(2)} mm`;
+  }
+
+  calcResults.impedance = { Zs, ZL_r, ZL_i, gamma_mag, gamma_phase, VSWR, RL, f };
+
+  document.getElementById('matchResults').innerHTML = `
+    <div class="result-box ${VSWR<2?'success':VSWR<3?'warn':''}">
+      <div class="result-label">VSWR</div>
+      <div class="result-value">${VSWR.toFixed(3)}</div>
+      <div class="result-unit">${VSWR<2?'✓ 良好':VSWR<3?'可接受':'✗ 需改善'}</div>
+    </div>
+    <div class="result-box">
+      <div class="result-label">反射係數 |Γ|</div>
+      <div class="result-value">${gamma_mag.toFixed(4)}</div>
+      <div class="result-unit">∠${gamma_phase.toFixed(1)}°</div>
+    </div>
+    <div class="result-box success">
+      <div class="result-label">回波損耗</div>
+      <div class="result-value">${RL.toFixed(2)}</div>
+      <div class="result-unit">dB</div>
+    </div>
+    <div class="result-box">
+      <div class="result-label">傳輸功率</div>
+      <div class="result-value">${((1-gamma_mag*gamma_mag)*100).toFixed(1)}</div>
+      <div class="result-unit">%</div>
+    </div>
+  `;
+
+  document.getElementById('smithInfo').textContent = matchInfo;
+  drawSmith(gamma_r, gamma_i);
+}
+
+// ============ SMITH CHART ============
+function drawSmith(gr, gi) {
+  const canvas = document.getElementById('smithCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const cx = W/2, cy = H/2, R = W/2 - 20;
+
+  ctx.fillStyle = '#1a2235';
+  ctx.fillRect(0,0,W,H);
+
+  // Outer circle
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,2*Math.PI);
+  ctx.strokeStyle = '#1e3a5f'; ctx.lineWidth = 2; ctx.stroke();
+
+  // Resistance circles (r=0,0.5,1,2,∞)
+  const rVals = [0, 0.2, 0.5, 1, 2, 5];
+  rVals.forEach(r => {
+    const rad = R/(1+r);
+    const cenx = cx + R*r/(1+r);
+    ctx.beginPath(); ctx.arc(cenx, cy, rad, 0, 2*Math.PI);
+    ctx.strokeStyle = 'rgba(0,229,255,0.2)'; ctx.lineWidth = 1; ctx.stroke();
+    if(r < 5) {
+      ctx.fillStyle = '#64748b'; ctx.font = '10px Space Mono'; ctx.textAlign = 'left';
+      ctx.fillText(r, cenx - rad/2, cy + 10);
+    }
+  });
+
+  // Reactance arcs (x=±0.5,±1,±2)
+  const xVals = [0.5, 1, 2, -0.5, -1, -2];
+  xVals.forEach(x => {
+    const rArc = R/Math.abs(x);
+    const ceny = cy - R/x;
+    ctx.beginPath();
+    ctx.arc(cx+R, ceny, rArc, 0, 2*Math.PI);
+    ctx.strokeStyle = 'rgba(255,107,53,0.2)'; ctx.lineWidth = 1; ctx.stroke();
+  });
+
+  // Horizontal axis
+  ctx.beginPath(); ctx.moveTo(cx-R,cy); ctx.lineTo(cx+R,cy);
+  ctx.strokeStyle = 'rgba(0,229,255,0.3)'; ctx.lineWidth = 1; ctx.stroke();
+
+  // Plot impedance point
+  const px = cx + gr * R;
+  const py = cy - gi * R;
+
+  ctx.beginPath(); ctx.arc(px, py, 8, 0, 2*Math.PI);
+  ctx.fillStyle = '#ff6b35'; ctx.fill();
+  ctx.beginPath(); ctx.arc(px, py, 12, 0, 2*Math.PI);
+  ctx.strokeStyle = 'rgba(255,107,53,0.4)'; ctx.lineWidth = 2; ctx.stroke();
+
+  // Center (50Ω matched point)
+  ctx.beginPath(); ctx.arc(cx, cy, 5, 0, 2*Math.PI);
+  ctx.fillStyle = '#00e5ff'; ctx.fill();
+
+  // Labels
+  ctx.fillStyle = '#64748b'; ctx.font = '10px Space Mono'; ctx.textAlign='center';
+  ctx.fillText('ΓL', cx-R-8, cy+4);
+  ctx.fillText('ΓR', cx+R+8, cy+4);
+  ctx.fillStyle = '#ff6b35'; ctx.font = 'bold 11px Space Mono';
+  ctx.fillText('ZL', px+14, py-8);
+  ctx.fillStyle = '#00e5ff';
+  ctx.fillText('Z₀', cx+14, cy-8);
+}
+
+// ============ ARRAY ============
+function calcArray() {
+  const N = parseInt(document.getElementById('arr_n').value);
+  const d = parseFloat(document.getElementById('arr_d').value);
+  const theta0 = parseFloat(document.getElementById('arr_theta').value) * Math.PI/180;
+  const type = document.getElementById('arr_type').value;
+
+  const psi0 = 2*Math.PI*d*Math.sin(theta0);
+  const directivity = Math.min(2*N*d, N*N*d*d) * 1.5;
+  const gain_dB = 10*Math.log10(directivity + 0.01);
+  const HPBW = 0.886 / (N*d) * 180/Math.PI;
+  const SLL = -13.26 - 20*Math.log10(N);
+
+  calcResults.array = { N, d, theta0: theta0*180/Math.PI, psi0, VSWR: 1.0 };
+
+  document.getElementById('arrayResults').innerHTML = `
+    <div class="result-box success"><div class="result-label">陣列增益</div><div class="result-value">${gain_dB.toFixed(2)}</div><div class="result-unit">dBi</div></div>
+    <div class="result-box"><div class="result-label">半功率波束寬</div><div class="result-value">${HPBW.toFixed(1)}</div><div class="result-unit">°</div></div>
+    <div class="result-box warn"><div class="result-label">旁瓣電平</div><div class="result-value">${SLL.toFixed(1)}</div><div class="result-unit">dB</div></div>
+    <div class="result-box"><div class="result-label">掃描相位差</div><div class="result-value">${(psi0*180/Math.PI).toFixed(2)}</div><div class="result-unit">°/元素</div></div>
+  `;
+
+  // Phase excitation table
+  let html = '';
+  for(let n=0; n<N; n++) {
+    const phase = (psi0 * n * 180/Math.PI) % 360;
+    html += `元素 ${n+1}：相位 = <span style="color:#00e5ff">${phase.toFixed(2)}°</span>，Δφ = ${(psi0*180/Math.PI).toFixed(2)}° × ${n}\n`;
+  }
+  document.getElementById('phaseExcitation').innerHTML = `<pre style="white-space:pre; font-family:var(--mono); font-size:12px;">${html}</pre>`;
+
+  drawArrayPattern(N, d, psi0);
+}
+
+function drawArrayPattern(N, d, psi0) {
+  const canvas = document.getElementById('arrayPatternCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const cx = W/2, cy = H/2, R = Math.min(W,H)/2 - 20;
+
+  ctx.fillStyle = '#111827';
+  ctx.fillRect(0,0,W,H);
+
+  for(let r=0.25; r<=1; r+=0.25) {
+    ctx.beginPath(); ctx.arc(cx,cy,R*r,0,2*Math.PI);
+    ctx.strokeStyle = 'rgba(0,229,255,0.1)'; ctx.lineWidth=1; ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(0,229,255,0.1)'; ctx.lineWidth=1;
+  for(let a=0; a<360; a+=30) {
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.lineTo(cx+R*Math.cos(a*Math.PI/180), cy+R*Math.sin(a*Math.PI/180));
+    ctx.stroke();
+  }
+
+  function AF(theta) {
+    const psi = 2*Math.PI*d*Math.sin(theta) + psi0;
+    if(Math.abs(Math.sin(psi/2)) < 0.0001) return N;
+    return Math.abs(Math.sin(N*psi/2) / Math.sin(psi/2));
+  }
+
+  let maxAF = 0;
+  for(let a=-90; a<=90; a+=0.5) maxAF = Math.max(maxAF, AF(a*Math.PI/180));
+
+  ctx.beginPath();
+  for(let a=0; a<=360; a++) {
+    const theta = (a - 90) * Math.PI/180;
+    const r = AF(theta) / maxAF * R;
+    const x = cx + r * Math.cos((a-90)*Math.PI/180);
+    const y = cy + r * Math.sin((a-90)*Math.PI/180);
+    a===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.closePath();
+  ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = 'rgba(0,229,255,0.07)'; ctx.fill();
+
+  ctx.fillStyle = '#64748b'; ctx.font = '11px Space Mono'; ctx.textAlign='center';
+  ctx.fillText('0°', cx, cy-R-6);
+  ctx.fillText('90°', cx+R+14, cy+4);
+  ctx.fillText('180°', cx, cy+R+14);
+  ctx.fillText('-90°', cx-R-18, cy+4);
+}
+
+// ============ EXPLAINER ============
+const explains = {
+  wavelength: {
+    title: '波長（Wavelength）',
+    body: `波長是電磁波在一個完整週期內傳播的距離，符號 λ（lambda）。\n\n公式：λ = c / f\n\n其中 c = 3×10⁸ m/s（光速），f = 頻率（Hz）\n\n天線的尺寸通常是波長的整數或分數倍，因為這決定了天線的諧振特性。`,
+    analogy: '🌊 比喻：想像往水塘丟石頭產生的水波。波長就是「波峰到波峰」的距離。頻率越高（丟石頭越快），波長越短，就像頻率越高的天線越短小。'
+  },
+  impedance: {
+    title: '阻抗匹配（Impedance Matching）',
+    body: `阻抗匹配的目標是讓天線阻抗（ZL）與傳輸線特性阻抗（通常 50 Ω）一致，以最大化能量傳輸。\n\n不匹配會造成部分訊號反射回來，以 VSWR（電壓駐波比）表示。\nVSWR = 1：完美匹配\nVSWR < 2：通常可接受\nVSWR > 3：需要改善`,
+    analogy: '🚗 比喻：阻抗匹配就像車輛換檔。如果引擎轉速（阻抗）和輪子轉速不匹配，能量就浪費在打滑上。換檔（匹配網路）讓兩端轉速一致，能量才能有效傳遞。'
+  },
+  phase: {
+    title: '相位（Phase）',
+    body: `相位描述訊號在時間軸上的「位置」，以角度（0°-360°）表示。\n\n訊號通過傳輸線或電路時，會產生相位延遲。\n延遲 = β × L，其中 β 是相位常數，L 是長度。\n\n在陣列天線中，控制每個元素的相位差可以讓波束指向特定方向（波束掃描）。`,
+    analogy: '⏰ 比喻：想像兩個人同步起跑，但其中一人晚了 1 秒才出發——他們跑一樣快，但永遠差那 1 秒，這就是「相位差」。在天線陣列中，故意製造相位差，讓各天線的訊號在特定方向上「同步到達」，產生最強的訊號。'
+  },
+  gain: {
+    title: '增益（Gain）',
+    body: `天線增益描述天線在某方向集中輻射能量的能力，單位 dBi（相對全向天線）。\n\n全向天線（理想）= 0 dBi\n半波偶極 = 2.15 dBi\n微帶天線 = 5-8 dBi\n八木天線（10元素）= 12+ dBi\n\n注意：增益是方向性的！高增益天線的波束更窄，不適合需要廣角覆蓋的應用。`,
+    analogy: '🔦 比喻：增益就像手電筒的聚光效果。散光燈（低增益）照亮整個房間，但每個角落都不太亮；聚光燈（高增益）把光集中在一個點，那個點非常亮，但照不到旁邊。天線高增益≠更大功率，只是把能量「聚集」到特定方向。'
+  },
+  vswr: {
+    title: 'VSWR（電壓駐波比）',
+    body: `VSWR = (1 + |Γ|) / (1 - |Γ|)\n\nΓ 是反射係數，代表有多少訊號被反射回來。\n\nVSWR = 1.0：0% 反射（完美）\nVSWR = 1.5：4% 反射\nVSWR = 2.0：11% 反射\nVSWR = 3.0：25% 反射\n\n回波損耗（Return Loss）= -20 log|Γ|，越大越好。`,
+    analogy: '🔊 比喻：講話時對著牆壁說話，部分聲音會反射回來形成回聲。VSWR 就是量化「有多少功率變成了回聲（反射）」。VSWR=1 就是聲音完全被吸收，沒有回聲——能量完全傳遞出去。'
+  },
+  array: {
+    title: '陣列天線（Antenna Array）',
+    body: `陣列天線由多個天線元素組成，透過控制各元素的相位和振幅，可以：\n\n1. 增加增益（多個元素能量疊加）\n2. 波束成形（改變相位讓波束指向某方向）\n3. 零點控制（消除特定方向的干擾）\n\n陣列因子（Array Factor, AF）描述陣列的方向性增強效果。\nN 個元素線性陣列的最大增益提升 ≈ N 倍（+10log(N) dB）`,
+    analogy: '🎺 比喻：一個喇叭聲音不夠大，多個喇叭同時朝同一方向播放，聲音就集中在那個方向並加倍放大。如果讓不同喇叭稍微「錯開時間」播放，聲音最強的方向就會偏移——這就是相位控制的波束掃描原理。'
+  }
+};
+
+function showExplain(key, el) {
+  document.querySelectorAll('#tab-explain .antenna-type-btn').forEach(b => b.classList.remove('active'));
+  if(el) el.classList.add('active');
+  const e = explains[key];
+  document.getElementById('explainContent').innerHTML = `
+    <div class="explainer">
+      <h4>${e.title}</h4>
+      <p style="white-space:pre-line;">${e.body}</p>
+      <div class="analogy">${e.analogy}</div>
+    </div>
+  `;
+}
+
+// ============ REPORT ============
+function generateReport() {
+  const title = document.getElementById('rpt_title').value;
+  const author = document.getElementById('rpt_author').value;
+  const project = document.getElementById('rpt_project').value;
+  const lang = document.getElementById('rpt_lang').value;
+  const now = new Date().toLocaleDateString('zh-TW');
+
+  const calc = calcResults.lastCalc || {};
+  const imp = calcResults.impedance || {};
+  const phase = calcResults.phase || {};
+  const arr = calcResults.array || {};
+
+  let report = '';
+
+  if(lang === 'zh') {
+    report += `╔══════════════════════════════════════════╗\n`;
+    report += `║           ${title}           ║\n`;
+    report += `╚══════════════════════════════════════════╝\n\n`;
+    report += `設計者：${author || '（未填寫）'}　　日期：${now}\n`;
+    report += `專案：${project || '（未填寫）'}\n`;
+    report += `${'─'.repeat(50)}\n\n`;
+
+    if(document.getElementById('rpt_basic').checked && calc.type) {
+      report += `一、天線基本參數\n${'─'.repeat(30)}\n`;
+      report += `天線類型：${antDescriptions[calc.type]?.name || calc.type}\n`;
+      report += `工作頻率：${calc.freq ? (calc.freq/1e6).toFixed(0) : '—'} MHz\n`;
+      report += `自由空間波長：${calc.lambda ? (calc.lambda*1000).toFixed(2) : '—'} mm\n`;
+      if(calc.results) {
+        Object.entries(calc.results).forEach(([k,v]) => {
+          report += `${k}：${v.v} ${v.u}\n`;
+        });
+      }
+      report += '\n';
+    }
+
+    if(document.getElementById('rpt_impedance').checked && imp.VSWR) {
+      report += `二、阻抗匹配分析\n${'─'.repeat(30)}\n`;
+      report += `訊號源阻抗：${imp.Zs} Ω\n`;
+      report += `天線阻抗：${imp.ZL_r} ${imp.ZL_i >= 0?'+':''}j${imp.ZL_i} Ω\n`;
+      report += `反射係數 |Γ|：${imp.gamma_mag?.toFixed(4)} ∠${imp.gamma_phase?.toFixed(2)}°\n`;
+      report += `VSWR：${imp.VSWR?.toFixed(3)} ${imp.VSWR < 2 ? '（良好）' : imp.VSWR < 3 ? '（可接受）' : '（需改善）'}\n`;
+      report += `回波損耗：${imp.RL?.toFixed(2)} dB\n`;
+      report += `功率傳輸效率：${((1-(imp.gamma_mag||0)**2)*100).toFixed(1)}%\n\n`;
+    }
+
+    if(document.getElementById('rpt_phase').checked && phase.phaseShift) {
+      report += `三、相位分析\n${'─'.repeat(30)}\n`;
+      report += `頻率：${phase.f ? (phase.f/1e6).toFixed(0) : '—'} MHz\n`;
+      report += `傳輸線長度：${phase.L ? (phase.L*1000).toFixed(2) : '—'} mm\n`;
+      report += `相位延遲：${phase.phaseShift?.toFixed(2)}°\n`;
+      report += `等效波長分數：${phase.lambdaFraction?.toFixed(4)} λ\n\n`;
+    }
+
+    if(document.getElementById('rpt_array').checked && arr.N) {
+      report += `四、陣列天線設計\n${'─'.repeat(30)}\n`;
+      report += `元素數量：${arr.N}\n`;
+      report += `元素間距：${arr.d} λ\n`;
+      report += `掃描角度：${arr.theta0}°\n`;
+      report += `相位差：${(arr.psi0*180/Math.PI).toFixed(2)}°/元素\n\n`;
+    }
+
+    if(document.getElementById('rpt_explain').checked) {
+      report += `五、術語說明（供非本科人員參考）\n${'─'.repeat(30)}\n`;
+      report += `VSWR（電壓駐波比）：數值越接近 1 越好，代表幾乎沒有訊號被反射。\n`;
+      report += `增益（dBi）：天線聚集輻射的能力。數字越大，特定方向訊號越強。\n`;
+      report += `阻抗匹配：讓天線與電路「協調工作」，避免能量浪費。\n`;
+      report += `相位：訊號的「時間位移」，用於陣列天線的波束控制。\n\n`;
+    }
+
+    report += `${'─'.repeat(50)}\n`;
+    report += `本報告由天線設計工具自動生成\n`;
+  }
+
+  const el = document.getElementById('reportOutput');
+  el.textContent = report;
+  el.style.display = 'block';
+}
+
+function copyReport() {
+  const text = document.getElementById('reportOutput').textContent;
+  if(!text) { alert('請先生成報告'); return; }
+  navigator.clipboard.writeText(text).then(() => alert('已複製到剪貼簿！'));
+}
+
+// ============ INIT ============
+window.onload = function() {
+  calcAntenna();
+  drawPhasors();
+  showExplain('wavelength', null);
+};
+</script>
+</body>
+</html>
